@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { RoomData } from "./RoomComponent";
 import { db } from "@/src/lib/firebase";
-import { collection, doc, onSnapshot, setDoc, addDoc, getDocs, updateDoc, deleteDoc } from "firebase/firestore";
-import { Cast, Loader2, ShieldAlert } from "lucide-react";
+import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
+import { Cast, Loader2 } from "lucide-react";
 
 interface ScreenStreamProps {
   room: RoomData;
@@ -19,36 +19,33 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string>("Desconectado");
   
-  // Keep references to peer connections
   const peerConnections = useRef<{ [peerId: string]: RTCPeerConnection }>({});
   const localStream = useRef<MediaStream | null>(null);
   const peerStream = useRef<MediaStream | null>(null);
   const sessionId = useRef(Math.random().toString(36).substring(2, 10));
 
   useEffect(() => {
-    // Ensure video elements retain their streams across re-renders
+    // Sincroniza refs de video na re-renderização
     if (videoRef.current) {
       if (isHost && isStreaming && localStream.current) {
         if (videoRef.current.srcObject !== localStream.current) {
           videoRef.current.srcObject = localStream.current;
         }
-      } else if (!isHost && peerStream.current) {
+      } else if (!isHost && room.streamActive && peerStream.current) {
         if (videoRef.current.srcObject !== peerStream.current) {
           videoRef.current.srcObject = peerStream.current;
         }
+      } else if (!isHost && !room.streamActive) {
+        videoRef.current.srcObject = null;
       }
     }
-  });
+  }, [isHost, isStreaming, room.streamActive]);
 
   const startScreenShare = async () => {
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: {
-          displaySurface: "browser", 
-        },
-        audio: {
-          suppressLocalAudioPlayback: false,
-        } as any
+        video: true,
+        audio: true
       });
       
       localStream.current = stream;
@@ -65,7 +62,6 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         stopScreenShare();
       };
       
-      // Now that we have a stream, signal readiness to any waiting peers
       await updateDoc(doc(db, "rooms", roomId), {
         streamActive: true
       });
@@ -91,22 +87,22 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       streamActive: false
     });
     
-    // Clean up connections
     Object.values(peerConnections.current).forEach(pc => pc.close());
     peerConnections.current = {};
   };
 
-  // Full WebRTC Signaling Logic
   useEffect(() => {
     const configuration = {
       iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
+        { urls: 'stun:stun1.l.google.com:19302' },
+        { urls: 'stun:stun2.l.google.com:19302' },
+        { urls: 'stun:stun3.l.google.com:19302' },
+        { urls: 'stun:stun4.l.google.com:19302' },
       ]
     };
 
     if (isHost) {
-      // HOST LOGIC
       if (!isStreaming) return;
 
       const peersRef = collection(db, "rooms", roomId, "peers");
@@ -115,64 +111,56 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         snapshot.docChanges().forEach(async (change) => {
           if (change.type === "added") {
             const peerId = change.doc.id;
-            // Ignore ourselves just in case
             if (peerId === userId) return;
             
-            console.log("Host viu que um novo Peer se registrou:", peerId);
+            console.log("Host detectou um novo espectador:", peerId);
             
             const pc = new RTCPeerConnection(configuration);
             peerConnections.current[peerId] = pc;
             
             const peerCandidatesQueue: RTCIceCandidateInit[] = [];
 
-            // Add local stream tracks to connection
             if (localStream.current) {
               localStream.current.getTracks().forEach(track => {
                 pc.addTrack(track, localStream.current!);
               });
             }
 
-            // Listen for ICE candidates and send them to Firebase
             pc.onicecandidate = async (event) => {
               if (event.candidate) {
                 await addDoc(collection(db, "rooms", roomId, "peers", peerId, "hostCandidates"), event.candidate.toJSON());
               }
             };
 
-            // Create Offer
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
 
-            // Send offer
             await updateDoc(doc(db, "rooms", roomId, "peers", peerId), {
-              offer: {
-                type: offer.type,
-                sdp: offer.sdp
-              }
+              offer: { type: offer.type, sdp: offer.sdp }
             });
 
-            // Listen for Answer
             onSnapshot(doc(db, "rooms", roomId, "peers", peerId), async (docSnap) => {
               const data = docSnap.data();
-              if (!pc.currentRemoteDescription && data?.answer) {
-                const answerDescription = new RTCSessionDescription(data.answer);
-                await pc.setRemoteDescription(answerDescription);
-                setConnectionStatus("Conectado a espectadores");
-                
-                peerCandidatesQueue.forEach(candidate => {
-                  pc.addIceCandidate(candidate).catch(e => console.error("Error adding queued candidate:", e));
-                });
-                peerCandidatesQueue.length = 0;
+              if (data?.answer && pc.signalingState !== "closed") {
+                if (!pc.currentRemoteDescription) {
+                  const answerDescription = new RTCSessionDescription(data.answer);
+                  await pc.setRemoteDescription(answerDescription);
+                  setConnectionStatus("Conectado a espectadores");
+                  
+                  peerCandidatesQueue.forEach(candidate => {
+                    pc.addIceCandidate(candidate).catch(e => console.error("Erro adicionando candidato em fila:", e));
+                  });
+                  peerCandidatesQueue.length = 0;
+                }
               }
             });
 
-            // Listen for Peer candidates
             onSnapshot(collection(db, "rooms", roomId, "peers", peerId, "peerCandidates"), (snapshot) => {
               snapshot.docChanges().forEach((change) => {
                 if (change.type === "added") {
                   const candidate = new RTCIceCandidate(change.doc.data());
                   if (pc.remoteDescription) {
-                    pc.addIceCandidate(candidate).catch(e => console.error("Error adding candidate:", e));
+                    pc.addIceCandidate(candidate).catch(console.error);
                   } else {
                     peerCandidatesQueue.push(candidate);
                   }
@@ -181,16 +169,26 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             });
 
             pc.onconnectionstatechange = () => {
-              console.log("Host connection state with", peerId, ":", pc.connectionState);
+              console.log("Status de conexão do host com", peerId, ":", pc.connectionState);
             };
           }
         });
       });
 
-      return () => unsubscribe();
+      return () => {
+        unsubscribe();
+        Object.values(peerConnections.current).forEach(pc => pc.close());
+        peerConnections.current = {};
+      };
       
     } else {
-      // PEER LOGIC -> Viewer connecting to host
+      if (!room.streamActive) {
+        setConnectionStatus("Aguardando o anfitrião iniciar...");
+        if (videoRef.current) videoRef.current.srcObject = null;
+        peerStream.current = null;
+        return;
+      }
+
       const pc = new RTCPeerConnection(configuration);
       let unregistered = false;
       const myPeerId = `${userId}_${sessionId.current}`;
@@ -202,7 +200,6 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         
         const hostCandidatesQueue: RTCIceCandidateInit[] = [];
         
-        // Register myself as a peer waiting for stream
         await setDoc(peerDocRef, { timestamp: new Date(), userId });
 
         pc.onicecandidate = async (event) => {
@@ -226,7 +223,6 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
           setConnectionStatus(`Status: ${pc.connectionState}`);
         };
 
-        // Listen for Host Offer
         onSnapshot(peerDocRef, async (docSnap) => {
           if (unregistered) return;
           const data = docSnap.data();
@@ -235,7 +231,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             await pc.setRemoteDescription(offerDescription);
             
             hostCandidatesQueue.forEach(candidate => {
-              pc.addIceCandidate(candidate).catch(e => console.error("Error adding queued candidate:", e));
+              pc.addIceCandidate(candidate).catch(console.error);
             });
             hostCandidatesQueue.length = 0;
             
@@ -243,21 +239,17 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             await pc.setLocalDescription(answer);
 
             await updateDoc(peerDocRef, {
-              answer: {
-                type: answer.type,
-                sdp: answer.sdp
-              }
+              answer: { type: answer.type, sdp: answer.sdp }
             });
           }
         });
 
-        // Listen for Host Candidates
         onSnapshot(collection(db, "rooms", roomId, "peers", myPeerId, "hostCandidates"), (snapshot) => {
           snapshot.docChanges().forEach((change) => {
             if (change.type === "added") {
               const candidate = new RTCIceCandidate(change.doc.data());
               if (pc.remoteDescription) {
-                pc.addIceCandidate(candidate).catch(e => console.error("Error adding candidate:", e));
+                pc.addIceCandidate(candidate).catch(console.error);
               } else {
                 hostCandidatesQueue.push(candidate);
               }
@@ -276,7 +268,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         deleteDoc(peerDocRef).catch(() => {});
       };
     }
-  }, [isHost, isStreaming, roomId, userId]);
+  }, [isHost, isStreaming, room.streamActive, roomId, userId]);
 
   return (
     <div className="w-full h-full relative flex items-center justify-center group bg-[#0A0A0A]">
@@ -284,7 +276,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         ref={videoRef}
         autoPlay
         playsInline
-        muted={isHost} // O host nÃ£o precisa ouvir o prÃ³prio Ã¡udio pra nÃ£o dar eco
+        muted={isHost}
         className="absolute inset-0 w-full h-full object-contain z-10"
       />
       
@@ -295,11 +287,11 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
           </div>
           <h2 className="text-2xl font-bold mb-2 tracking-tight">Iniciar Transmissão</h2>
           <p className="text-white/60 text-sm max-w-sm mb-4 leading-relaxed">
-            Selecione a guia do navegador ou aplicativo para compartilhar.
+            Selecione a guia ou aplicativo para compartilhar.
           </p>
           <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl mb-8 max-w-sm text-left">
             <p className="text-white/80 text-xs leading-relaxed">
-              <strong className="text-red-400">Aviso para Netflix/Prime Video:</strong> Para transmitir sem ficar com a tela preta, você precisa ir nas configurações do seu navegador e <strong>desativar a "Aceleração de Hardware"</strong>, e então reiniciar o navegador. Compartilhe sempre a <strong className="text-white">Guia do Chrome</strong> para ter áudio.
+              <strong className="text-red-400">Aviso para Netflix/Prime Video:</strong> Para evitar tela preta, vá nas configurações do seu navegador e <strong>desative a "Aceleração de Hardware"</strong> e reinicie-o. Para ter áudio na transmissão, sempre compartilhe uma <strong className="text-white">Guia do Chrome / Navegador</strong>.
             </p>
           </div>
           <button 
@@ -313,13 +305,12 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       )}
 
       {!isHost && connectionStatus !== "Sintonizado" && (
-        <div className="z-20 flex flex-col items-center">
+        <div className="z-20 flex flex-col items-center p-6 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl">
            <Loader2 className="w-10 h-10 animate-spin text-purple-500 mb-4" />
-           <p className="text-white/70 font-mono text-sm tracking-widest uppercase">{connectionStatus}</p>
+           <p className="text-white/70 font-mono text-sm tracking-widest uppercase text-center max-w-xs">{connectionStatus}</p>
         </div>
       )}
 
-      {/* Floating Status UI */}
       <div className="absolute top-4 left-4 flex gap-2 z-30">
         {isHost && isStreaming ? (
            <span className="px-3 py-1 bg-red-600 text-[10px] font-bold rounded uppercase tracking-widest shadow-[0_0_10px_rgba(220,38,38,0.5)] animate-pulse">
@@ -330,7 +321,6 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
              Recebendo Imagem
            </span>
         ) : null}
-        
       </div>
       
       {isHost && isStreaming && (

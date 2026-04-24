@@ -14,6 +14,7 @@ import Link from "next/link";
 export interface RoomData {
   videoId: string;
   sourceType?: 'youtube' | 'stream';
+  streamActive?: boolean;
   isPlaying: boolean;
   currentTime: number;
   hostId: string;
