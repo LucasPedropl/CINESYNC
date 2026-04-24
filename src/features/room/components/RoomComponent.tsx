@@ -30,7 +30,7 @@ export function RoomComponent({ roomId }: { roomId: string }) {
   useEffect(() => {
     if (authLoading) return;
     if (!user) {
-      router.push("/");
+      router.push(`/?redirect=/room/${roomId}`);
       return;
     }
 
@@ -79,34 +79,35 @@ export function RoomComponent({ roomId }: { roomId: string }) {
   };
 
   return (
-    <div className="flex-1 flex flex-col lg:flex-col h-screen bg-transparent p-4 lg:p-6 gap-4 lg:gap-6 overflow-hidden relative">
+    <div className="flex-1 flex flex-col h-[100dvh] bg-transparent p-2 sm:p-4 lg:p-6 gap-2 sm:gap-4 lg:gap-6 overflow-hidden relative">
       {/* Top Header */}
-      <header className="h-16 px-4 lg:px-8 flex items-center justify-between border border-white/10 rounded-2xl bg-white/[0.03] backdrop-blur-[30px] shadow-2xl shrink-0">
-        <div className="flex items-center gap-3">
-          <Link href="/" className="w-10 h-10 hover:bg-white/10 rounded-full text-white backdrop-blur-sm transition-colors flex items-center justify-center">
-            <ArrowLeft className="w-5 h-5" />
+      <header className="h-14 sm:h-16 px-3 sm:px-4 lg:px-8 flex items-center justify-between border border-white/10 rounded-2xl bg-white/[0.03] backdrop-blur-[30px] shadow-2xl shrink-0">
+        <div className="flex items-center gap-2 sm:gap-3">
+          <Link href="/" className="w-8 h-8 sm:w-10 sm:h-10 hover:bg-white/10 rounded-full text-white backdrop-blur-sm transition-colors flex items-center justify-center">
+            <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5" />
           </Link>
-          <h1 className="text-2xl font-black tracking-tighter">CINE<span className="text-purple-400">SYNC</span></h1>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tighter">CINE<span className="text-purple-400">SYNC</span></h1>
         </div>
 
-        <div className="flex items-center gap-4 lg:gap-6">
-          <div className="hidden sm:flex items-center gap-2 px-4 py-2 bg-black/40 border border-white/10 rounded-full">
+        <div className="flex items-center gap-2 sm:gap-4 lg:gap-6">
+          <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-black/40 border border-white/10 rounded-full">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse shadow-[0_0_8px_#22c55e]"></span>
             <span className="text-[10px] font-mono text-white/50 tracking-widest uppercase">ID: {roomId}</span>
           </div>
           <button 
             onClick={handleCopyLink}
-            className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-sm font-bold uppercase tracking-widest rounded-full transition-all shadow-[0_0_20px_rgba(147,51,234,0.3)] flex items-center gap-2 active:scale-95"
+            className="px-4 py-2 sm:px-6 sm:py-2 bg-purple-600 hover:bg-purple-500 text-xs sm:text-sm font-bold uppercase tracking-widest rounded-full transition-all shadow-[0_0_20px_rgba(147,51,234,0.3)] flex items-center gap-2 active:scale-95"
           >
-            <Copy className="w-4 h-4" />
+            <Copy className="w-3 h-3 sm:w-4 sm:h-4" />
             <span className="hidden sm:inline">CONVIDAR</span>
+            <span className="sm:hidden">LINK</span>
           </button>
         </div>
       </header>
 
-      <div className="flex-1 flex flex-col gap-4 lg:gap-6 overflow-hidden">
+      <div className="flex-1 flex flex-col gap-2 sm:gap-4 lg:gap-6 min-h-0">
         {/* Top: Player */}
-        <div className="flex-[2] relative bg-[#050201] rounded-[32px] border border-white/5 shadow-2xl overflow-hidden group min-h-[40vh]">
+        <div className="w-full aspect-video lg:aspect-auto lg:flex-[2] relative bg-[#050201] rounded-2xl lg:rounded-[32px] border border-white/5 shadow-2xl overflow-hidden group shrink-0 lg:shrink">
           {room.sourceType === 'stream' ? (
              <ScreenStream room={room} roomId={roomId} userId={user.uid} />
           ) : (
@@ -115,51 +116,51 @@ export function RoomComponent({ roomId }: { roomId: string }) {
         </div>
 
         {/* Bottom Section: Controls & Chat */}
-        <div className="flex-1 min-h-[40vh] lg:h-64 flex flex-col lg:flex-row gap-4 lg:gap-6">
+        <div className="flex-1 flex flex-col lg:flex-row gap-2 sm:gap-4 lg:gap-6 min-h-0">
           {/* Streaming Selection Card */}
-          <div className="w-full lg:w-[320px] bg-white/[0.03] rounded-[32px] border border-white/10 p-6 flex flex-col gap-4 backdrop-blur-[30px] shrink-0 overflow-y-auto">
-            <h3 className="text-[10px] font-bold text-white/40 uppercase tracking-widest font-mono">
+          <div className="w-full lg:w-[320px] bg-white/[0.03] rounded-2xl lg:rounded-[32px] border border-white/10 p-3 sm:p-4 lg:p-6 flex flex-col lg:gap-4 backdrop-blur-[30px] shrink-0">
+            <h3 className="hidden lg:block text-[10px] font-bold text-white/40 uppercase tracking-widest font-mono">
               {isHost ? "Selecionar Fonte" : "Fonte Atual"}
             </h3>
-            <div className="grid grid-cols-2 gap-3 flex-1">
+            <div className="flex lg:grid lg:grid-cols-2 gap-2 sm:gap-3 flex-1 lg:flex-none">
               <div 
                 onClick={() => changeSource('youtube')}
-                className={`rounded-2xl flex flex-col items-center justify-center gap-3 p-4 transition-all text-center ${
+                className={`flex-1 lg:flex-none rounded-xl lg:rounded-2xl flex lg:flex-col items-center justify-center gap-2 sm:gap-3 p-2 sm:p-3 lg:p-4 transition-all text-center ${
                   room.sourceType !== 'stream' 
                     ? 'bg-gradient-to-br from-red-600/20 to-red-900/20 border border-red-500/30' 
                     : 'bg-black/40 border border-white/5 hover:border-white/10 hover:bg-white/5 cursor-pointer'
                 } ${!isHost ? 'pointer-events-none' : ''}`}
               >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${room.sourceType !== 'stream' ? 'bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-white/10'}`}>
-                  <Youtube className="w-5 h-5 text-white" />
+                <div className={`w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full flex items-center justify-center shrink-0 ${room.sourceType !== 'stream' ? 'bg-red-500 shadow-[0_0_20px_rgba(239,68,68,0.4)]' : 'bg-white/10'}`}>
+                  <Youtube className="w-3 h-3 lg:w-5 lg:h-5 text-white" />
                 </div>
-                <span className="text-[11px] font-bold tracking-wider uppercase">YouTube</span>
+                <span className="text-[9px] lg:text-[11px] font-bold tracking-wider uppercase">YouTube</span>
               </div>
               
               <div 
                 onClick={() => changeSource('stream')}
-                className={`rounded-2xl flex flex-col items-center justify-center gap-3 p-4 transition-all text-center ${
+                className={`flex-1 lg:flex-none rounded-xl lg:rounded-2xl flex lg:flex-col items-center justify-center gap-2 sm:gap-3 p-2 sm:p-3 lg:p-4 transition-all text-center ${
                   room.sourceType === 'stream' 
                     ? 'bg-gradient-to-br from-purple-600/20 to-purple-900/20 border border-purple-500/30' 
                     : 'bg-black/40 border border-white/5 hover:border-white/10 hover:bg-white/5 cursor-pointer'
                 } ${!isHost ? 'pointer-events-none' : ''}`}
                 title="Transmita arquivos do PC ou Netflix da sua aba"
               >
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${room.sourceType === 'stream' ? 'bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'bg-white/10'}`}>
-                  <MonitorPlay className="w-5 h-5 text-white" />
+                <div className={`w-6 h-6 sm:w-8 sm:h-8 lg:w-10 lg:h-10 rounded-full flex items-center justify-center shrink-0 ${room.sourceType === 'stream' ? 'bg-purple-500 shadow-[0_0_20px_rgba(168,85,247,0.4)]' : 'bg-white/10'}`}>
+                  <MonitorPlay className="w-3 h-3 lg:w-5 lg:h-5 text-white" />
                 </div>
-                <span className="text-[11px] font-bold tracking-wider uppercase">Transmissão</span>
+                <span className="text-[9px] lg:text-[11px] font-bold tracking-wider uppercase truncate max-w-full px-1">Transmissão</span>
               </div>
             </div>
             {isHost && (
-              <p className="text-[9px] text-white/30 text-center uppercase tracking-widest mt-2 leading-relaxed">
+              <p className="hidden lg:block text-[9px] text-white/30 text-center uppercase tracking-widest mt-2 leading-relaxed">
                 * Para filmes, transmita uma guia do navegador.
               </p>
             )}
           </div>
 
           {/* Chat Container */}
-          <div className="flex-1 bg-white/[0.03] rounded-[32px] border border-white/10 flex flex-col backdrop-blur-[30px] shadow-inner overflow-hidden">
+          <div className="flex-1 bg-white/[0.03] rounded-2xl lg:rounded-[32px] border border-white/10 flex flex-col backdrop-blur-[30px] shadow-inner overflow-hidden min-h-0">
             <Chat roomId={roomId} />
           </div>
         </div>

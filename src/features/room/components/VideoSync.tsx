@@ -149,19 +149,19 @@ export function VideoSync({ room, roomId, userId }: VideoSyncProps) {
            <Youtube className="w-10 h-10 text-red-500" />
         </div>
         {isHost ? (
-          <div className="max-w-md w-full flex flex-col gap-5 text-center">
-            <h2 className="text-2xl font-black text-white tracking-tighter">YouTube Sync</h2>
-            <p className="text-sm text-white/50 mb-2 leading-relaxed">Cole a URL do vídeo que deseja assistir com seus amigos.</p>
-            <div className="flex gap-3">
+          <div className="max-w-md w-full flex flex-col gap-3 sm:gap-5 text-center px-4">
+            <h2 className="text-xl sm:text-2xl font-black text-white tracking-tighter">YouTube Sync</h2>
+            <p className="text-xs sm:text-sm text-white/50 mb-2 leading-relaxed">Cole a URL do vídeo que deseja assistir com seus amigos.</p>
+            <div className="flex flex-col sm:flex-row gap-3">
               <input 
                 value={inputUrl}
                 onChange={(e) => setInputUrl(e.target.value)}
                 placeholder="https://youtube.com/watch?v=..."
-                className="flex-1 bg-black/40 border border-white/10 rounded-full px-6 py-4 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-red-500/50 transition-colors shadow-inner"
+                className="flex-1 bg-black/40 border border-white/10 rounded-full px-4 sm:px-6 py-3 sm:py-4 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-red-500/50 transition-colors shadow-inner"
               />
               <button 
                 onClick={handleSetVideo}
-                className="bg-red-600 hover:bg-red-500 text-white px-8 py-4 rounded-full font-bold uppercase tracking-widest text-sm transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)] shrink-0 active:scale-95"
+                className="bg-red-600 hover:bg-red-500 text-white px-6 sm:px-8 py-3 sm:py-4 rounded-full font-bold uppercase tracking-widest text-xs sm:text-sm transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)] shrink-0 active:scale-95"
               >
                 CARREGAR
               </button>
