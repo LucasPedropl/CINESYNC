@@ -15,9 +15,11 @@ interface ScreenStreamProps {
 export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
   const isHost = room.hostId === userId;
   const videoRef = useRef<HTMLVideoElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<string>("Desconectado");
+  const [isLocalFile, setIsLocalFile] = useState(false);
   
   const peerConnections = useRef<{ [peerId: string]: RTCPeerConnection }>({});
   const localStream = useRef<MediaStream | null>(null);
@@ -27,7 +29,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
   useEffect(() => {
     // Sincroniza refs de video na re-renderização
     if (videoRef.current) {
-      if (isHost && isStreaming && localStream.current) {
+      if (isHost && isStreaming && localStream.current && !isLocalFile) {
         if (videoRef.current.srcObject !== localStream.current) {
           videoRef.current.srcObject = localStream.current;
         }
@@ -39,15 +41,17 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         videoRef.current.srcObject = null;
       }
     }
-  }, [isHost, isStreaming, room.streamActive]);
+  }, [isHost, isStreaming, room.streamActive, isLocalFile]);
 
   const startScreenShare = async () => {
     try {
+      setError(null);
       const stream = await navigator.mediaDevices.getDisplayMedia({
         video: true,
         audio: true
       });
       
+      setIsLocalFile(false);
       localStream.current = stream;
       
       if (videoRef.current) {
@@ -72,15 +76,64 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
     }
   };
 
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setError(null);
+      setIsLocalFile(true);
+      const url = URL.createObjectURL(file);
+      
+      if (videoRef.current) {
+        videoRef.current.srcObject = null; // Clear previous media
+        videoRef.current.src = url;
+        videoRef.current.load();
+        
+        videoRef.current.oncanplay = async () => {
+          videoRef.current?.play().catch(console.error);
+          
+          let stream: MediaStream | null = null;
+          if ('captureStream' in videoRef.current!) {
+            stream = (videoRef.current as any).captureStream();
+          } else if ('mozCaptureStream' in videoRef.current!) {
+            stream = (videoRef.current as any).mozCaptureStream();
+          }
+
+          if (stream) {
+            localStream.current = stream;
+            setIsStreaming(true);
+            setConnectionStatus("Transmitindo Vídeo Local...");
+
+            await updateDoc(doc(db, "rooms", roomId), {
+              streamActive: true
+            });
+          } else {
+            setError("Seu navegador não suporta a transmissão de arquivos locais.");
+          }
+          
+          if (videoRef.current) {
+             videoRef.current.oncanplay = null;
+          }
+        };
+      }
+    } catch (err) {
+      console.error("Erro ao iniciar arquivo", err);
+      setError("Erro ao processar arquivo de vídeo.");
+    }
+  };
+
   const stopScreenShare = async () => {
-    if (localStream.current) {
+    if (localStream.current && !isLocalFile) {
       localStream.current.getTracks().forEach(track => track.stop());
     }
     localStream.current = null;
     if (videoRef.current) {
       videoRef.current.srcObject = null;
+      videoRef.current.src = "";
     }
     setIsStreaming(false);
+    setIsLocalFile(false);
     setConnectionStatus("Parado");
     
     await updateDoc(doc(db, "rooms", roomId), {
@@ -209,7 +262,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         const hostCandidatesQueue: RTCIceCandidateInit[] = [];
         let handledHostCandidates = 0;
         
-        await setDoc(peerDocRef, { timestamp: new Date(), userId });
+        await setDoc(peerDocRef, { timestamp: new Date(), userId }, { merge: true });
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
@@ -292,6 +345,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         autoPlay
         playsInline
         muted={isHost}
+        controls={isHost && isLocalFile}
         className="absolute inset-0 w-full h-full object-contain z-10"
       />
       
@@ -315,6 +369,29 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
           >
             ESCOLHER TELA / GUIA
           </button>
+
+          <div className="w-full mt-4 flex flex-col gap-2 relative">
+             <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span className="bg-[#0b0b0b] px-2 text-white/30 text-xs font-bold uppercase tracking-widest">OU</span>
+             </div>
+             <hr className="border-white/10 my-3" />
+          </div>
+
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="w-full mt-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold tracking-widest uppercase text-sm py-4 rounded-full transition-all active:scale-[0.98]"
+          >
+            RODAR VÍDEO DO PC
+          </button>
+          
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileSelect} 
+            accept="video/*" 
+            className="hidden" 
+          />
+
           {error && <p className="text-red-400 text-sm mt-4 font-bold">{error}</p>}
         </div>
       )}
