@@ -22,6 +22,23 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
   // Keep references to peer connections
   const peerConnections = useRef<{ [peerId: string]: RTCPeerConnection }>({});
   const localStream = useRef<MediaStream | null>(null);
+  const peerStream = useRef<MediaStream | null>(null);
+  const sessionId = useRef(Math.random().toString(36).substring(2, 10));
+
+  useEffect(() => {
+    // Ensure video elements retain their streams across re-renders
+    if (videoRef.current) {
+      if (isHost && isStreaming && localStream.current) {
+        if (videoRef.current.srcObject !== localStream.current) {
+          videoRef.current.srcObject = localStream.current;
+        }
+      } else if (!isHost && peerStream.current) {
+        if (videoRef.current.srcObject !== peerStream.current) {
+          videoRef.current.srcObject = peerStream.current;
+        }
+      }
+    }
+  });
 
   const startScreenShare = async () => {
     try {
@@ -38,6 +55,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(console.error);
       }
       
       setIsStreaming(true);
@@ -175,8 +193,9 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       // PEER LOGIC -> Viewer connecting to host
       const pc = new RTCPeerConnection(configuration);
       let unregistered = false;
-
-      const peerDocRef = doc(db, "rooms", roomId, "peers", userId);
+      const myPeerId = `${userId}_${sessionId.current}`;
+      const peerDocRef = doc(db, "rooms", roomId, "peers", myPeerId);
+      const videoRefLocal = videoRef.current;
 
       const setupViewer = async () => {
         setConnectionStatus("Conectando ao anfitrião...");
@@ -184,18 +203,22 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         const hostCandidatesQueue: RTCIceCandidateInit[] = [];
         
         // Register myself as a peer waiting for stream
-        await setDoc(peerDocRef, { timestamp: new Date() });
+        await setDoc(peerDocRef, { timestamp: new Date(), userId });
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
-            await addDoc(collection(db, "rooms", roomId, "peers", userId, "peerCandidates"), event.candidate.toJSON());
+            await addDoc(collection(db, "rooms", roomId, "peers", myPeerId, "peerCandidates"), event.candidate.toJSON());
           }
         };
 
         pc.ontrack = (event) => {
-          if (videoRef.current) {
-            videoRef.current.srcObject = event.streams[0];
-            setConnectionStatus("Sintonizado");
+          if (event.streams && event.streams[0]) {
+            peerStream.current = event.streams[0];
+            if (videoRef.current) {
+              videoRef.current.srcObject = event.streams[0];
+              videoRef.current.play().catch(console.error);
+              setConnectionStatus("Sintonizado");
+            }
           }
         };
 
@@ -229,7 +252,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         });
 
         // Listen for Host Candidates
-        onSnapshot(collection(db, "rooms", roomId, "peers", userId, "hostCandidates"), (snapshot) => {
+        onSnapshot(collection(db, "rooms", roomId, "peers", myPeerId, "hostCandidates"), (snapshot) => {
           snapshot.docChanges().forEach((change) => {
             if (change.type === "added") {
               const candidate = new RTCIceCandidate(change.doc.data());
@@ -248,7 +271,9 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       return () => {
         unregistered = true;
         pc.close();
-        if (videoRef.current) videoRef.current.srcObject = null;
+        if (videoRefLocal) videoRefLocal.srcObject = null;
+        peerStream.current = null;
+        deleteDoc(peerDocRef).catch(() => {});
       };
     }
   }, [isHost, isStreaming, roomId, userId]);
@@ -269,9 +294,14 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             <Cast className="w-8 h-8 text-white" />
           </div>
           <h2 className="text-2xl font-bold mb-2 tracking-tight">Iniciar Transmissão</h2>
-          <p className="text-white/60 text-sm max-w-sm mb-8 leading-relaxed">
-            Selecione a guia do navegador ou aplicativo para compartilhar. Se for Netflix, lembre-se de compartilhar <b className="text-white">a Guia do Chrome</b> para que o áudio funcione corretamente.
+          <p className="text-white/60 text-sm max-w-sm mb-4 leading-relaxed">
+            Selecione a guia do navegador ou aplicativo para compartilhar.
           </p>
+          <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl mb-8 max-w-sm text-left">
+            <p className="text-white/80 text-xs leading-relaxed">
+              <strong className="text-red-400">Aviso para Netflix/Prime Video:</strong> Para transmitir sem ficar com a tela preta, você precisa ir nas configurações do seu navegador e <strong>desativar a "Aceleração de Hardware"</strong>, e então reiniciar o navegador. Compartilhe sempre a <strong className="text-white">Guia do Chrome</strong> para ter áudio.
+            </p>
+          </div>
           <button 
             onClick={startScreenShare}
             className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-8 rounded-full transition-all shadow-[0_0_20px_rgba(147,51,234,0.4)]"
