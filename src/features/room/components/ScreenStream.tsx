@@ -3,8 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { RoomData } from "./RoomComponent";
 import { db } from "@/src/lib/firebase";
-import { collection, doc, onSnapshot, setDoc, addDoc, updateDoc, deleteDoc } from "firebase/firestore";
-import { Cast, Loader2 } from "lucide-react";
+import { collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, arrayUnion } from "firebase/firestore";
+import { Cast } from "lucide-react";
 
 interface ScreenStreamProps {
   room: RoomData;
@@ -119,6 +119,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             peerConnections.current[peerId] = pc;
             
             const peerCandidatesQueue: RTCIceCandidateInit[] = [];
+            let handledPeerCandidates = 0;
 
             if (localStream.current) {
               localStream.current.getTracks().forEach(track => {
@@ -128,20 +129,26 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
 
             pc.onicecandidate = async (event) => {
               if (event.candidate) {
-                await addDoc(collection(db, "rooms", roomId, "peers", peerId, "hostCandidates"), event.candidate.toJSON());
+                try {
+                  await setDoc(doc(db, "rooms", roomId, "peers", peerId), {
+                    hostCandidates: arrayUnion(event.candidate.toJSON())
+                  }, { merge: true });
+                } catch(e) {}
               }
             };
 
             const offer = await pc.createOffer();
             await pc.setLocalDescription(offer);
 
-            await updateDoc(doc(db, "rooms", roomId, "peers", peerId), {
+            await setDoc(doc(db, "rooms", roomId, "peers", peerId), {
               offer: { type: offer.type, sdp: offer.sdp }
-            });
+            }, { merge: true });
 
             onSnapshot(doc(db, "rooms", roomId, "peers", peerId), async (docSnap) => {
               const data = docSnap.data();
-              if (data?.answer && pc.signalingState !== "closed") {
+              if (!data) return;
+
+              if (data.answer && pc.signalingState !== "closed") {
                 if (!pc.currentRemoteDescription) {
                   const answerDescription = new RTCSessionDescription(data.answer);
                   await pc.setRemoteDescription(answerDescription);
@@ -153,19 +160,19 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
                   peerCandidatesQueue.length = 0;
                 }
               }
-            });
 
-            onSnapshot(collection(db, "rooms", roomId, "peers", peerId, "peerCandidates"), (snapshot) => {
-              snapshot.docChanges().forEach((change) => {
-                if (change.type === "added") {
-                  const candidate = new RTCIceCandidate(change.doc.data());
+              if (data.peerCandidates && data.peerCandidates.length > handledPeerCandidates) {
+                const newCands = data.peerCandidates.slice(handledPeerCandidates);
+                handledPeerCandidates = data.peerCandidates.length;
+                newCands.forEach((c: any) => {
+                  const candidate = new RTCIceCandidate(c);
                   if (pc.remoteDescription) {
                     pc.addIceCandidate(candidate).catch(console.error);
                   } else {
                     peerCandidatesQueue.push(candidate);
                   }
-                }
-              });
+                });
+              }
             });
 
             pc.onconnectionstatechange = () => {
@@ -200,12 +207,17 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         setConnectionStatus("Conectando ao anfitrião...");
         
         const hostCandidatesQueue: RTCIceCandidateInit[] = [];
+        let handledHostCandidates = 0;
         
         await setDoc(peerDocRef, { timestamp: new Date(), userId });
 
         pc.onicecandidate = async (event) => {
           if (event.candidate) {
-            await addDoc(collection(db, "rooms", roomId, "peers", myPeerId, "peerCandidates"), event.candidate.toJSON());
+            try {
+              await setDoc(peerDocRef, {
+                peerCandidates: arrayUnion(event.candidate.toJSON())
+              }, { merge: true });
+            } catch(e) {}
           }
         };
 
@@ -227,7 +239,9 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         onSnapshot(peerDocRef, async (docSnap) => {
           if (unregistered) return;
           const data = docSnap.data();
-          if (!pc.currentRemoteDescription && data?.offer) {
+          if (!data) return;
+
+          if (!pc.currentRemoteDescription && data.offer) {
             const offerDescription = new RTCSessionDescription(data.offer);
             await pc.setRemoteDescription(offerDescription);
             
@@ -239,23 +253,23 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
 
-            await updateDoc(peerDocRef, {
+            await setDoc(peerDocRef, {
               answer: { type: answer.type, sdp: answer.sdp }
-            });
+            }, { merge: true });
           }
-        });
 
-        onSnapshot(collection(db, "rooms", roomId, "peers", myPeerId, "hostCandidates"), (snapshot) => {
-          snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-              const candidate = new RTCIceCandidate(change.doc.data());
-              if (pc.remoteDescription) {
-                pc.addIceCandidate(candidate).catch(console.error);
-              } else {
-                hostCandidatesQueue.push(candidate);
-              }
-            }
-          });
+          if (data.hostCandidates && data.hostCandidates.length > handledHostCandidates) {
+             const newCands = data.hostCandidates.slice(handledHostCandidates);
+             handledHostCandidates = data.hostCandidates.length;
+             newCands.forEach((c: any) => {
+               const candidate = new RTCIceCandidate(c);
+               if (pc.remoteDescription) {
+                 pc.addIceCandidate(candidate).catch(console.error);
+               } else {
+                 hostCandidatesQueue.push(candidate);
+               }
+             });
+          }
         });
       };
 

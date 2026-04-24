@@ -205,6 +205,7 @@ export function VideoSync({ room, roomId, userId }: VideoSyncProps) {
             modestbranding: 1,
             rel: 0,
             disablekb: isHost ? 0 : 1,
+            origin: typeof window !== 'undefined' ? window.location.origin : undefined,
           },
         }}
         onReady={onPlayerReady}
