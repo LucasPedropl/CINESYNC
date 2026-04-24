@@ -22,7 +22,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
   const peerConnections = useRef<{ [peerId: string]: RTCPeerConnection }>({});
   const localStream = useRef<MediaStream | null>(null);
   const peerStream = useRef<MediaStream | null>(null);
-  const sessionId = useRef(Math.random().toString(36).substring(2, 10));
+  const [sessionId] = useState(() => Math.random().toString(36).substring(2, 10));
 
   useEffect(() => {
     // Sincroniza refs de video na re-renderização
@@ -183,6 +183,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       
     } else {
       if (!room.streamActive) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setConnectionStatus("Aguardando o anfitrião iniciar...");
         if (videoRef.current) videoRef.current.srcObject = null;
         peerStream.current = null;
@@ -191,7 +192,7 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
 
       const pc = new RTCPeerConnection(configuration);
       let unregistered = false;
-      const myPeerId = `${userId}_${sessionId.current}`;
+      const myPeerId = `${userId}_${sessionId}`;
       const peerDocRef = doc(db, "rooms", roomId, "peers", myPeerId);
       const videoRefLocal = videoRef.current;
 
@@ -268,10 +269,10 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
         deleteDoc(peerDocRef).catch(() => {});
       };
     }
-  }, [isHost, isStreaming, room.streamActive, roomId, userId]);
+  }, [isHost, isStreaming, room.streamActive, roomId, userId, sessionId]);
 
   return (
-    <div className="w-full h-full relative flex items-center justify-center group bg-[#0A0A0A]">
+    <div className="w-full h-full relative flex items-center justify-center group bg-transparent">
       <video
         ref={videoRef}
         autoPlay
@@ -281,44 +282,46 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       />
       
       {!isStreaming && isHost && (
-        <div className="z-20 flex flex-col items-center text-center p-6 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl">
-          <div className="w-16 h-16 rounded-full bg-purple-600 flex items-center justify-center mb-6 shadow-[0_0_30px_rgba(147,51,234,0.5)]">
-            <Cast className="w-8 h-8 text-white" />
+        <div className="z-20 flex flex-col items-center text-center p-8 bg-white/[0.03] backdrop-blur-[30px] border border-white/10 rounded-[32px] shadow-2xl max-w-lg w-full mx-4">
+          <div className="w-20 h-20 rounded-3xl bg-purple-600 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(147,51,234,0.4)]">
+            <Cast className="w-10 h-10 text-white" />
           </div>
-          <h2 className="text-2xl font-bold mb-2 tracking-tight">Iniciar Transmissão</h2>
-          <p className="text-white/60 text-sm max-w-sm mb-4 leading-relaxed">
-            Selecione a guia ou aplicativo para compartilhar.
+          <h2 className="text-3xl font-black mb-3 tracking-tighter">Iniciar Transmissão</h2>
+          <p className="text-white/60 text-base mb-6 leading-relaxed">
+            Selecione a guia ou aplicativo para compartilhar com a sala.
           </p>
-          <div className="bg-red-500/10 border border-red-500/20 p-3 rounded-xl mb-8 max-w-sm text-left">
+          <div className="bg-red-500/10 border border-red-500/20 p-5 rounded-2xl mb-8 max-w-sm text-left">
             <p className="text-white/80 text-xs leading-relaxed">
-              <strong className="text-red-400">Aviso para Netflix/Prime Video:</strong> Para evitar tela preta, vá nas configurações do seu navegador e <strong>desative a "Aceleração de Hardware"</strong> e reinicie-o. Para ter áudio na transmissão, sempre compartilhe uma <strong className="text-white">Guia do Chrome / Navegador</strong>.
+              <strong className="text-red-400">Aviso para Netflix/Prime:</strong> Desative a &quot;Aceleração de Hardware&quot; no seu navegador para evitar tela preta. Para transmitir o áudio, sempre compartilhe uma <strong className="text-white">Guia do Navegador</strong>.
             </p>
           </div>
           <button 
             onClick={startScreenShare}
-            className="bg-purple-600 hover:bg-purple-500 text-white font-bold py-3 px-8 rounded-full transition-all shadow-[0_0_20px_rgba(147,51,234,0.4)]"
+            className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold tracking-widest uppercase text-sm py-4 rounded-full transition-all shadow-[0_0_20px_rgba(147,51,234,0.3)] hover:shadow-[0_0_30px_rgba(147,51,234,0.5)] active:scale-[0.98]"
           >
-            Escolher Tela / Guia
+            ESCOLHER TELA / GUIA
           </button>
-          {error && <p className="text-red-400 text-sm mt-4">{error}</p>}
+          {error && <p className="text-red-400 text-sm mt-4 font-bold">{error}</p>}
         </div>
       )}
 
       {!isHost && connectionStatus !== "Sintonizado" && (
-        <div className="z-20 flex flex-col items-center p-6 bg-black/60 backdrop-blur-xl border border-white/10 rounded-2xl">
-           <Loader2 className="w-10 h-10 animate-spin text-purple-500 mb-4" />
-           <p className="text-white/70 font-mono text-sm tracking-widest uppercase text-center max-w-xs">{connectionStatus}</p>
+        <div className="z-20 flex flex-col items-center p-8 bg-white/[0.03] backdrop-blur-[30px] border border-white/10 rounded-[32px] shadow-2xl">
+           <div className="flex flex-col items-center justify-center w-16 h-16 rounded-full bg-white/5 border border-white/10 mb-6">
+             <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent animate-spin rounded-full"></div>
+           </div>
+           <p className="text-white/70 font-mono text-[10px] tracking-widest uppercase text-center max-w-xs">{connectionStatus}</p>
         </div>
       )}
 
-      <div className="absolute top-4 left-4 flex gap-2 z-30">
+      <div className="absolute top-4 left-4 flex gap-2 z-30 opacity-0 group-hover:opacity-100 transition-opacity">
         {isHost && isStreaming ? (
-           <span className="px-3 py-1 bg-red-600 text-[10px] font-bold rounded uppercase tracking-widest shadow-[0_0_10px_rgba(220,38,38,0.5)] animate-pulse">
-             Você está ao vivo
+           <span className="px-4 py-2 bg-red-600 text-[10px] font-bold rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(220,38,38,0.5)] animate-pulse backdrop-blur-md">
+             AO VIVO
            </span>
         ) : !isHost && connectionStatus === "Sintonizado" ? (
-           <span className="px-3 py-1 bg-green-600 text-[10px] font-bold rounded uppercase tracking-widest shadow-[0_0_10px_rgba(22,163,74,0.5)]">
-             Recebendo Imagem
+           <span className="px-4 py-2 bg-green-600/80 text-[10px] font-bold rounded-full uppercase tracking-widest shadow-[0_0_15px_rgba(22,163,74,0.5)] backdrop-blur-md">
+             CONECTADO
            </span>
         ) : null}
       </div>
@@ -326,9 +329,9 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
       {isHost && isStreaming && (
         <button 
           onClick={stopScreenShare}
-          className="absolute top-4 right-4 z-30 bg-black/60 backdrop-blur-md border border-white/10 text-white/80 hover:text-white px-4 py-2 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
+          className="absolute top-4 right-4 z-30 bg-black/80 backdrop-blur-md border border-white/10 text-white hover:text-red-400 px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-colors shadow-xl opacity-0 group-hover:opacity-100"
         >
-          Parar Transmissão
+          ENCERRAR
         </button>
       )}
     </div>

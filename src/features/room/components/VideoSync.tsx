@@ -144,32 +144,33 @@ export function VideoSync({ room, roomId, userId }: VideoSyncProps) {
 
   if (!room.videoId) {
     return (
-      <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-[#0A0A0A]">
-        <div className="w-16 h-16 rounded-full bg-red-600/20 flex flex-col items-center justify-center mb-6">
-           <Youtube className="w-8 h-8 text-red-500" />
+      <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-transparent">
+        <div className="w-20 h-20 rounded-3xl bg-red-600/20 flex items-center justify-center mb-8 shadow-[0_0_40px_rgba(239,68,68,0.2)] border border-red-500/20">
+           <Youtube className="w-10 h-10 text-red-500" />
         </div>
         {isHost ? (
-          <div className="max-w-md w-full flex flex-col gap-4 text-center">
-            <h2 className="text-xl font-bold text-white tracking-tight">Adicionar Vídeo do YouTube</h2>
-            <p className="text-sm text-white/50 mb-2">Cole a URL do vídeo que deseja assistir com seus amigos.</p>
-            <div className="flex gap-2">
+          <div className="max-w-md w-full flex flex-col gap-5 text-center">
+            <h2 className="text-2xl font-black text-white tracking-tighter">YouTube Sync</h2>
+            <p className="text-sm text-white/50 mb-2 leading-relaxed">Cole a URL do vídeo que deseja assistir com seus amigos.</p>
+            <div className="flex gap-3">
               <input 
                 value={inputUrl}
                 onChange={(e) => setInputUrl(e.target.value)}
                 placeholder="https://youtube.com/watch?v=..."
-                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:ring-1 focus:ring-red-500 transition-shadow"
+                className="flex-1 bg-black/40 border border-white/10 rounded-full px-6 py-4 text-sm text-white/90 placeholder:text-white/30 focus:outline-none focus:border-red-500/50 transition-colors shadow-inner"
               />
               <button 
                 onClick={handleSetVideo}
-                className="bg-red-600 hover:bg-red-500 text-white px-6 py-3 rounded-xl font-semibold transition-colors shadow-[0_0_20px_rgba(220,38,38,0.3)] shrink-0"
+                className="bg-red-600 hover:bg-red-500 text-white px-8 py-4 rounded-full font-bold uppercase tracking-widest text-sm transition-all shadow-[0_0_20px_rgba(220,38,38,0.3)] shrink-0 active:scale-95"
               >
-                Carregar
+                CARREGAR
               </button>
             </div>
           </div>
         ) : (
-          <div className="text-center">
-             <h2 className="text-xl font-bold text-white mb-2 tracking-tight">Aguardando o Anfitrião</h2>
+          <div className="text-center flex flex-col items-center gap-3">
+             <div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin mb-2"></div>
+             <h2 className="text-2xl font-black text-white tracking-tighter">Aguardando</h2>
              <p className="text-sm text-white/50">O anfitrião está escolhendo o vídeo...</p>
           </div>
         )}
@@ -178,7 +179,7 @@ export function VideoSync({ room, roomId, userId }: VideoSyncProps) {
   }
 
   return (
-    <div className="w-full h-full relative group bg-black">
+    <div className="w-full h-full relative group bg-transparent">
       {/* Non-host blocker overlay to prevent them from clicking the player directly */}
       {!isHost && (
         <div className="absolute inset-0 z-10" title="Apenas o anfitrião pode controlar o vídeo." />
@@ -187,9 +188,9 @@ export function VideoSync({ room, roomId, userId }: VideoSyncProps) {
         <div className="absolute top-4 right-4 z-20 opacity-0 group-hover:opacity-100 transition-opacity">
           <button 
             onClick={() => updateDoc(doc(db, "rooms", roomId), { videoId: "" })}
-            className="bg-black/60 backdrop-blur-md border border-white/10 text-white hover:text-red-400 px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-colors"
+            className="bg-black/80 backdrop-blur-md border border-white/10 text-white hover:text-red-400 px-5 py-2.5 rounded-full text-[10px] font-bold uppercase tracking-widest transition-colors shadow-xl"
           >
-            Trocar Vídeo
+            TROCAR VÍDEO
           </button>
         </div>
       )}
