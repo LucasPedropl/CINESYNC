@@ -104,6 +104,8 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             
             const pc = new RTCPeerConnection(configuration);
             peerConnections.current[peerId] = pc;
+            
+            const peerCandidatesQueue: RTCIceCandidateInit[] = [];
 
             // Add local stream tracks to connection
             if (localStream.current) {
@@ -132,12 +134,17 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             });
 
             // Listen for Answer
-            onSnapshot(doc(db, "rooms", roomId, "peers", peerId), (docSnap) => {
+            onSnapshot(doc(db, "rooms", roomId, "peers", peerId), async (docSnap) => {
               const data = docSnap.data();
               if (!pc.currentRemoteDescription && data?.answer) {
                 const answerDescription = new RTCSessionDescription(data.answer);
-                pc.setRemoteDescription(answerDescription);
+                await pc.setRemoteDescription(answerDescription);
                 setConnectionStatus("Conectado a espectadores");
+                
+                peerCandidatesQueue.forEach(candidate => {
+                  pc.addIceCandidate(candidate).catch(e => console.error("Error adding queued candidate:", e));
+                });
+                peerCandidatesQueue.length = 0;
               }
             });
 
@@ -146,7 +153,11 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
               snapshot.docChanges().forEach((change) => {
                 if (change.type === "added") {
                   const candidate = new RTCIceCandidate(change.doc.data());
-                  pc.addIceCandidate(candidate);
+                  if (pc.remoteDescription) {
+                    pc.addIceCandidate(candidate).catch(e => console.error("Error adding candidate:", e));
+                  } else {
+                    peerCandidatesQueue.push(candidate);
+                  }
                 }
               });
             });
@@ -169,6 +180,8 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
 
       const setupViewer = async () => {
         setConnectionStatus("Conectando ao anfitrião...");
+        
+        const hostCandidatesQueue: RTCIceCandidateInit[] = [];
         
         // Register myself as a peer waiting for stream
         await setDoc(peerDocRef, { timestamp: new Date() });
@@ -198,6 +211,11 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
             const offerDescription = new RTCSessionDescription(data.offer);
             await pc.setRemoteDescription(offerDescription);
             
+            hostCandidatesQueue.forEach(candidate => {
+              pc.addIceCandidate(candidate).catch(e => console.error("Error adding queued candidate:", e));
+            });
+            hostCandidatesQueue.length = 0;
+            
             const answer = await pc.createAnswer();
             await pc.setLocalDescription(answer);
 
@@ -215,7 +233,11 @@ export function ScreenStream({ room, roomId, userId }: ScreenStreamProps) {
           snapshot.docChanges().forEach((change) => {
             if (change.type === "added") {
               const candidate = new RTCIceCandidate(change.doc.data());
-              pc.addIceCandidate(candidate);
+              if (pc.remoteDescription) {
+                pc.addIceCandidate(candidate).catch(e => console.error("Error adding candidate:", e));
+              } else {
+                hostCandidatesQueue.push(candidate);
+              }
             }
           });
         });
